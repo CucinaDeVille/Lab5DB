@@ -73,6 +73,7 @@ public class GUI extends JFrame {
         });
 
         //Verbindung initialisieren
+        //Ausgangszustand
         initConnectButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -84,9 +85,9 @@ public class GUI extends JFrame {
                 System.out.println("Verbindung erfolgreich hergestellt");
 
                 //Gadgets laden
-                navigator = new GadgetNavigator();
-                navigator.loadGadgets(GUI.this);
-                System.out.println("Liste mit Gadgets geladen!");
+                //navigator = new GadgetNavigator();
+                //navigator.loadGadgets(GUI.this);
+                //System.out.println("Liste mit Gadgets geladen!");
             }
         });
 
@@ -121,6 +122,11 @@ public class GUI extends JFrame {
                 if (loginSuccess){
                     statusLabel.setText("logged in");
                     System.out.println("Login erfolgreich");
+
+                    //Gadgets laden (Hier hin umgezogen)
+                    navigator = new GadgetNavigator();
+                    navigator.loadGadgets(GUI.this);
+                    System.out.println("Liste mit Gadgets geladen!");
                 }
                 //Login nicht erfolgreich
                 else {
