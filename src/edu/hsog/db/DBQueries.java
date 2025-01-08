@@ -2,33 +2,32 @@ package edu.hsog.db;
 
 import javax.swing.*;
 import java.sql.*;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 public class DBQueries {
 
-    //Login verifizieren
-    public static boolean verifyLogin(String email, String passwd, GUI gui) {
+    //TODO: Methoden hier in try-with-Ressource umbauen!!
+
+    //Login verifizieren - Umgeschrieben
+    public static boolean verifyLogin(String email, String passwd) {
         String sql = "select count (*)\n" +
                 "from users\n" +
                 "where email = ? and passwd = ?";
 
-        try {
-
-            //Statement erstellen mit String
-            PreparedStatement pst = gui.connection.prepareStatement(sql);
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pst = connection.prepareStatement(sql)) {
 
             //Parameter setzen für "?"
             pst.setString(1, email);
             pst.setString(2, passwd);
 
-            ResultSet rs = pst.executeQuery();
-            if (rs.next()) {
-                int count = rs.getInt(1);
-                return count > 0; //true, wenn Benutzer gefunden wurde
+            try(ResultSet rs = pst.executeQuery()){
+                if (rs.next()) {
+                    int count = rs.getInt(1);
+                    return count > 0; //true, wenn Benutzer gefunden wurde
+                }
             }
 
         } catch (SQLException ex) {
@@ -38,15 +37,16 @@ public class DBQueries {
         return false; //Bei Fehler oder ungültigen Daten
     }
 
-    //Anzahl Gadgets ermitteln
-    public static int countGadgets(GUI gui) {
+    //Anzahl Gadgets ermitteln - Umgeschrieben
+    public static int countGadgets() {
         int count = 0;  //Variable für die Anzahl
         String sql = "select count (*) as total\n" +
                 "from gadgets";
         //Verbindung und Statement erstellen
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(sql);
-            ResultSet rs = pst.executeQuery();
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pst = connection.prepareStatement(sql);
+             ResultSet rs = pst.executeQuery()
+        ) {
             // Ergebnis abrufen
             if (rs.next()) {
                 count = rs.getInt("total");
@@ -59,47 +59,47 @@ public class DBQueries {
         return 0; //Keine Ergebnisse
     }
 
-    //Neuen User Registrieren
-    public static boolean registerUser(String email, String passwd, GUI gui) {
+    //Neuen User Registrieren - Umgeschrieben
+    public static boolean registerUser(String email, String passwd) {
 
-        String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
+        //Prüfen, ob User schon existiert
+        String sqlCheck = "SELECT COUNT(*) FROM users WHERE email = ?";
 
-        //Zunächst prüfen, ob der Benutzer bereits existiert
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(sql);
-            pst.setString(1, email);
-            ResultSet rs = pst.executeQuery();
+        //Benutzer existiert noch nicht → registrieren
+        String insertQuery = "INSERT INTO users (email, passwd) VALUES (?, ?)";
 
-            //Fall, dass User mit dieser E-Mail schon existiert
-            if (rs.next() && rs.getInt(1) > 0) {
-                return false;
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pstCheck = connection.prepareStatement(sqlCheck);
+             PreparedStatement pstInsert = connection.prepareStatement(insertQuery)) {
+
+            //Zunächst prüfen, ob der Benutzer bereits existiert
+            pstCheck.setString(1, email); //Paramerter setzen
+
+            //Ausführen
+            try(ResultSet rs = pstCheck.executeQuery()){
+                //Fall, dass User mit dieser E-Mail schon existiert
+                if (rs.next() && rs.getInt(1) > 0) {
+                    return false;
+                }
             }
+            //-----------------------------------------------------
+            //Benutzer einfügen
+            pstInsert.setString(1, email); //Parameter E-Mail einsetzen
+            pstInsert.setString(2, passwd); //Parameter Passwort einsetzen
+
+            int rowsAffected = pstInsert.executeUpdate(); //Abfrage ausführen
+
+            //Wenn eine Zeile betroffen ist, wurde der Benutzer erfolgreich registriert
+            return rowsAffected > 0; //True, wenn größer 0, sonst false
 
         } catch (SQLException ex) {
             ex.printStackTrace();
             return false; //Fehler beim Überprüfen der E-Mail
         }
-
-        //Benutzer existiert noch nicht → registrieren
-        String insertQuery = "INSERT INTO users (email, passwd) VALUES (?, ?)";
-
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(insertQuery);
-            pst.setString(1, email); //Parameter E-Mail einsetzen
-            pst.setString(2, passwd); //Parameter Passwort einsetzen
-            int rowsAffected = pst.executeUpdate(); //Abfrage ausführen
-
-            //Wenn eine Zeile betroffen ist, wurde der Benutzer erfolgreich registriert
-            return rowsAffected > 0;
-
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return false; //Fehler beim Einfügen des neuen Benutzers
-        }
     }
 
-    //Gadgets der URL nach absteigend abfragen
-    public static List<DTO> getBestRatedGadgets(GUI gui) {
+    //Gadgets der URL nach absteigend abfragen - Umgeschrieben
+    public static List<DTO> getBestRatedGadgets() {
 
         //Liste mit Gadgets anlegen
         List<DTO> gadgets = new ArrayList<>();
@@ -109,67 +109,69 @@ public class DBQueries {
                 "from gadgets\n" +
                 "order by url asc";
 
-        try {
-            ResultSet rs = gui.connection.createStatement().executeQuery(sql);
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pst = connection.prepareStatement(sql)) {
 
-            //Durch RS iterieren und für jeden Eintrag ein DTO-Objekt anlegen
-            while (rs.next()) {
+            try(ResultSet rs = pst.executeQuery()){
+                //Durch RS iterieren und für jeden Eintrag ein DTO-Objekt anlegen
+                while (rs.next()) {
+                    //BLOB für Cover abrufen
+                    Blob coverBlob = rs.getBlob("cover");
 
-                //BLOB für Cover abrufen
-                Blob coverBlob = rs.getBlob("cover");
+                    //BLOB in Icon umwandeln
+                    Icon cover = null;
+                    if (coverBlob != null){
+                        cover = Converter.blob2Icon(coverBlob);
+                    }
 
-                //BLOB in Icon umwandeln
-                Icon cover = null;
-                if (coverBlob != null){
-                    cover = Converter.blob2Icon(coverBlob);
+                    //DTO für jedes Gadget mit durchschnittlicher Bewertung erstellen
+                    DTO gadget = new DTO(
+                            rs.getString("gadget_url"),
+                            rs.getString("verkaeufer_email"),
+                            rs.getString("keywords"),
+                            rs.getString("description"),
+                            cover,
+
+                            //Bewertung noch auf 0 gesetzt → Kommt noch
+                            0.0,
+
+                            //Kommentare noch leer → Kommen noch
+                            ""
+                    );
+
+                    //Kommentare und Rating abfragen
+                    getCommentsAndAverageRating(gadget);
+
+                    //An Liste anhängen
+                    gadgets.add(gadget);
                 }
-
-                //DTO für jedes Gadget mit durchschnittlicher Bewertung erstellen
-                DTO gadget = new DTO(
-                        rs.getString("gadget_url"),
-                        rs.getString("verkaeufer_email"),
-                        rs.getString("keywords"),
-                        rs.getString("description"),
-                        cover,
-
-                        //Bewertung noch auf 0 gesetzt → Kommt noch
-                        0.0,
-
-                        //Kommentare noch leer → Kommen noch
-                        ""
-                );
-
-                //Kommentare und Rating abfragen
-                getCommentsAndAverageRating(gadget);
-
-                //An Liste anhängen
-                gadgets.add(gadget);
             }
+
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
-
         return gadgets;
     }
 
-    //Kommentare zu Gadget-Element holen
+    //Kommentare zu Gadget-Element holen - Umgeschrieben
     public static void getCommentsAndAverageRating (DTO gadget){
         String sql = "select gefallen, kommentar, url\n" +
                 "from bewertung\n" +
                 "where url = ?\n" +
                 "order by kommentar desc";
-        try (Connection con = Globals.getPoolConnection();
-             PreparedStatement pst = con.prepareStatement(sql)) {
+
+        try (Connection connection = Globals.getPoolConnection();
+            PreparedStatement pst = connection.prepareStatement(sql)) {
 
             //Parameter setzen für "?"
             pst.setString(1, gadget.getUrl());
 
-            int summeRatings = 0;
-            int anzahlRatings = 0;
-            //String comments = "";
-
             //Prepared-statement ausführen
-            try (ResultSet rs = pst.executeQuery()) {
+            try(ResultSet rs = pst.executeQuery()){
+                int summeRatings = 0;
+                int anzahlRatings = 0;
+                //String comments = "";
+
                 List<String> commentList = new ArrayList<>();
                 while (rs.next()){
                     summeRatings += rs.getInt("gefallen");
@@ -183,7 +185,12 @@ public class DBQueries {
                 String comments = String.join(System.lineSeparator(), commentList) + System.lineSeparator();
                 gadget.setComments(comments);
 
-                gadget.setAverageRating((double) summeRatings /anzahlRatings);
+                //Durchschnitt berechnen, wenn Bewertungen vorhanden sind
+                if (anzahlRatings > 0){
+                    gadget.setAverageRating((double) summeRatings /anzahlRatings);
+                } else {
+                    gadget.setAverageRating(0.0);
+                }
             }
         }
         catch (SQLException e) {
@@ -191,81 +198,32 @@ public class DBQueries {
         }
     }
 
-    //Kommentar und Bewertung zu Gadget hinzufügen
-    public static boolean addCommentRating (GUI gui, String url, String email_bewerter, String comment, int rating) {
+    //Kommentar und Bewertung zu Gadget hinzufügen - Umgeschrieben
+    public static boolean addCommentRating (String url, String email_bewerter, String comment, int rating) {
 
         //Prüfen, ob Nutzer hat schon Kommentar zu dem Produkt abgegeben hat
         String sqlCheck = "select count (*)\n" +
                 "from bewertung\n" +
                 "where url =? and email =?";
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(sqlCheck);
-            pst.setString(1, url);
-            pst.setString(2, email_bewerter);
-            ResultSet rs = pst.executeQuery();
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pstCheck = connection.prepareStatement(sqlCheck)) {
 
-            //Fall, dass User mit dieser E-Mail schon kommentiert hat
-            if (rs.next() && rs.getInt(1) > 0) {
-                boolean successfullyUpdated = false;
+            //Parameter setzen
+            pstCheck.setString(1, url);
+            pstCheck.setString(2, email_bewerter);
 
-                String sqlUpdate = "UPDATE bewertung\n" +
-                        "SET kommentar = ?,\n" +
-                        "gefallen = ?\n" +
-                        "WHERE email = ? \n" +
-                        "  AND url = ?";
-
-                try {
-                    PreparedStatement pstUpdate = gui.connection.prepareStatement(sqlUpdate);
-
-                    //Werte einfügen
-                    pstUpdate.setString(1, comment);
-                    pstUpdate.setInt(2, rating);
-                    pstUpdate.setString(3, email_bewerter);
-                    pstUpdate.setString(4, url);
-
-                    //Ausführen
-                    int rowsAffected = pstUpdate.executeUpdate();
-
-                    if (rowsAffected > 0){
-                        successfullyUpdated = true;
-                        return successfullyUpdated;
-                    }
-                    return successfullyUpdated;
-
-                } catch (SQLException e){
-                    throw new RuntimeException("Ein fehler ist aufgetreten: " + e.getMessage());
+            //Ausführen
+            try(ResultSet rs = pstCheck.executeQuery()){
+                //Fall, dass User mit dieser E-Mail schon kommentiert hat
+                if (rs.next() && rs.getInt(1) > 0) {
+                    //Benutzer hat bereits kommentiert → Kommentar und Bewertung aktualisieren
+                    return updateCommentRating(connection, url, email_bewerter, comment, rating);
                 }
-            }
-
-            //User hat für dieses Produkt noch nicht kommentiert
-            else {
-                System.out.println("Nutzer hat hier noch nicht kommentiert");
-
-                boolean succcessfulyInserted = false;
-
-                String sqlInsert = "insert into bewertung (email, url, gefallen, kommentar)\n" +
-                        "values (?, ?, ?, ?)";
-
-                try {
-                    PreparedStatement pstInsert = gui.connection.prepareStatement(sqlInsert);
-
-                    //Werte einfügen
-                    pstInsert.setString(1, email_bewerter);
-                    pstInsert.setString(2, url);
-                    pstInsert.setInt(3, rating);
-                    pstInsert.setString(4, comment);
-
-                    //Ausführen
-                    int rowsAffected = pstInsert.executeUpdate();
-
-                    if (rowsAffected > 0){
-                        succcessfulyInserted = true;
-                        return succcessfulyInserted;
-                    }
-                    return succcessfulyInserted;
-
-                } catch (SQLException e){
-                    throw new RuntimeException("Ein fehler ist aufgetreten: " + e.getMessage());
+                //User hat für dieses Produkt noch nicht kommentiert
+                else {
+                    System.out.println("Nutzer hat hier noch nicht kommentiert");
+                    // Benutzer hat noch nicht kommentiert, neuen Kommentar einfügen
+                    return insertCommentRating(connection, url, email_bewerter, comment, rating);
                 }
             }
 
@@ -275,82 +233,146 @@ public class DBQueries {
         }
     }
 
-    //Produkt erstellen/ updaten
-    public static void createUpdateGadget(GUI gui, String url, String email_verkaeufer, String keywords, String description, Icon cover){
-        String sqlIsInDB = "select *\n" +
+    //Hilfsmethode zum Aktualisieren eines Kommentars
+    private static boolean updateCommentRating(Connection connection, String url, String email_bewerter, String comment, int rating) {
+        String sqlUpdate = "UPDATE bewertung\n" +
+                "SET kommentar = ?,\n" +
+                "gefallen = ?\n" +
+                "WHERE email = ? \n" +
+                "  AND url = ?";
+
+        try (PreparedStatement pstUpdate = connection.prepareStatement(sqlUpdate)) {
+            pstUpdate.setString(1, comment);
+            pstUpdate.setInt(2, rating);
+            pstUpdate.setString(3, email_bewerter);
+            pstUpdate.setString(4, url);
+
+            //Ausführen
+            return pstUpdate.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Fehler beim Aktualisieren des Kommentars: " + e.getMessage());
+        }
+    }
+
+    //Hilfsmethode für neuen Kommentar
+    private static boolean insertCommentRating(Connection connection, String url, String email_bewerter, String comment, int rating) {
+        String sqlInsert = "insert into bewertung (email, url, gefallen, kommentar)\n" +
+                "values (?, ?, ?, ?)";
+
+        try (PreparedStatement pstInsert = connection.prepareStatement(sqlInsert)) {
+            pstInsert.setString(1, email_bewerter);
+            pstInsert.setString(2, url);
+            pstInsert.setInt(3, rating);
+            pstInsert.setString(4, comment);
+
+            // Ausführen
+            return pstInsert.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Fehler beim Einfügen des Kommentars: " + e.getMessage());
+        }
+    }
+
+
+
+
+
+    //Produkt erstellen/ updaten - Umgeschrieben
+    public static void createUpdateGadget(String url, String email_verkaeufer, String keywords, String description, Icon cover){
+        String sqlCheck = "select *\n" +
                 "from gadgets\n" +
                 "where url = ?";
 
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(sqlIsInDB);
-            pst.setString(1, url);
-            ResultSet rs = pst.executeQuery();
+        try (Connection connection = Globals.getPoolConnection();
+             PreparedStatement pstCheck = connection.prepareStatement(sqlCheck)) {
 
-            //Produkt schon vorhanden UND Verkäufer ist angemeldet → aktualisieren
-            if (rs.next() && rs.getString(2).equals(email_verkaeufer)){
-                String sqlUpdateGadget = "UPDATE Gadgets\n" +
-                        "SET Keywords = ?, Description = ?, Cover = ?\n" +
-                        "WHERE URL = ?";
+            //Parameter setzen
+            pstCheck.setString(1, url);
 
-                try {
-                    PreparedStatement pstUpdate = gui.connection.prepareStatement(sqlUpdateGadget);
+            //Ausführen
+            try (ResultSet rs = pstCheck.executeQuery()) {
 
-                    //Werte einfügen
-                    pstUpdate.setString(1, keywords);
-                    pstUpdate.setString(2, description);
-                    pstUpdate.setBlob(3, Converter.icon2Blob(cover, gui.connection));
-                    pstUpdate.setString(4, url);
+                //Produkt mit dieser URL existiert
+                if (rs.next()){
+                    //Wer ist Verkäufer?
+                    String existingEmail = rs.getString(2);
 
-                    //Ausführen
-                    int rowsAffected = pstUpdate.executeUpdate();
-                    if (rowsAffected > 0){
-                        System.out.println("Erfolgreich aktualisiert");
+                    //Produkt schon vorhanden UND Verkäufer ist angemeldet → aktualisieren
+                    if (existingEmail.equals(email_verkaeufer)) {
+                        //Produkt aktualisieren
+                        updateGadget(connection, url, keywords, description, cover);
                     }
+                }
 
-                } catch (SQLException e){
-                    throw new RuntimeException("Ein fehler ist aufgetreten: " + e.getMessage());
+                //Produkt noch nicht vorhanden → anlegen
+                else {
+                    createGadget(connection, url, email_verkaeufer, keywords, description, cover);
                 }
             }
-
-            //Produkt noch nicht vorhanden → anlegen
-            else {
-                String sqlCreateNewGadget = "INSERT INTO Gadgets (url, email, keywords, description, cover)\n" +
-                        "VALUES (?, ?, ?, ?, ?)";
-
-                try {
-                    PreparedStatement pstInsert = gui.connection.prepareStatement(sqlCreateNewGadget);
-
-                    //Werte einfügen
-                    pstInsert.setString(1, url);
-                    pstInsert.setString(2, email_verkaeufer);
-                    pstInsert.setString(3, keywords);
-                    pstInsert.setString(4, description);
-                    pstInsert.setBlob(5, Converter.icon2Blob(cover, gui.connection));
-
-                    //Ausführen
-                    int rowsAffected = pstInsert.executeUpdate();
-                    if (rowsAffected > 0){
-                        System.out.println("Erfolgreich eingestellt");
-                    }
-
-                } catch (SQLException e){
-                    throw new RuntimeException("Ein fehler ist aufgetreten: " + e.getMessage());
-                }
-            }
-
         }
         catch (SQLException ex) {
             ex.printStackTrace();
         }
     }
 
+    //Hilfsmethode zu createUpdate
+    private static void updateGadget(Connection connection, String url, String keywords, String description, Icon cover) {
+        String sqlUpdate = "UPDATE Gadgets\n" +
+                "SET Keywords = ?, Description = ?, Cover = ?\n" +
+                "WHERE URL = ?";
+
+        try (PreparedStatement pstUpdate = connection.prepareStatement(sqlUpdate)) {
+            pstUpdate.setString(1, keywords);
+            pstUpdate.setString(2, description);
+            pstUpdate.setBlob(3, Converter.icon2Blob(cover, connection));
+            pstUpdate.setString(4, url);
+
+            int rowsAffected = pstUpdate.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Erfolgreich aktualisiert");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Fehler beim Aktualisieren: " + e.getMessage(), e);
+        }
+    }
+
+    //Hilfsmethode zu createUpdate
+    private static void createGadget(Connection connection, String url, String email_verkaeufer, String keywords, String description, Icon cover) {
+        String sqlInsert = "INSERT INTO Gadgets (url, email, keywords, description, cover)\n" +
+                "VALUES (?, ?, ?, ?, ?)";
+
+        try (PreparedStatement pstInsert = connection.prepareStatement(sqlInsert)) {
+
+            //Werte einfügen
+            pstInsert.setString(1, url);
+            pstInsert.setString(2, email_verkaeufer);
+            pstInsert.setString(3, keywords);
+            pstInsert.setString(4, description);
+            pstInsert.setBlob(5, Converter.icon2Blob(cover, connection));
+
+            int rowsAffected = pstInsert.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Erfolgreich hinzugefügt");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Fehler beim Hinzufügen des Gadgets: " + e.getMessage(), e);
+        }
+    }
+
+
+
+
+
     //Produkt löschen (als Verkäufer)
-    public static void deleteItem(GUI gui, String url){
+    public static void deleteItem(String url){
         String sqlDelete = "DELETE FROM Gadgets\n" +
                 "WHERE URL = ?";
 
-        try {
-            PreparedStatement pst = gui.connection.prepareStatement(sqlDelete);
+        try(Connection connection = Globals.getPoolConnection();
+            PreparedStatement pst = connection.prepareStatement(sqlDelete)) {
+
+            //Werte setzen
             pst.setString(1, url);
 
             int rowsAffected = pst.executeUpdate();

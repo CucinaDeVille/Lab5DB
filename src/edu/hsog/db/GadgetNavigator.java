@@ -13,10 +13,11 @@ public class GadgetNavigator {
         this.currentIndex = 0;
     }
 
-    public void loadGadgets(GUI gui){
+    public void loadGadgets(){
 
         //Liste gadgetsEcht befüllen mit Inhalt
-        gadgetsEcht = DBQueries.getBestRatedGadgets(gui);
+        gadgetsEcht = DBQueries.getBestRatedGadgets();
+        System.out.println("Hat geklappt");
     }
 
     //Methode zum Abrufen des bestbewertetsten Gadgets

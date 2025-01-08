@@ -11,9 +11,6 @@ import java.util.Locale;
 
 public class GUI extends JFrame {
 
-    //Verbindung
-    Connection connection;
-
     //Navigator für die Liste
     GadgetNavigator navigator;
 
@@ -58,6 +55,8 @@ public class GUI extends JFrame {
     }
 
 
+    //Problem: Bei jedem Test wird ein neues GUI-Objekt erstellt, aber keine neue Connection als Attribut zugewiesen.
+    //Die bestehenden Objekte werden gelöscht, die Connection aber nicht geschlossen
     public GUI(){
 
         //"exitButton" ist der FieldName bei GUI.form!
@@ -80,14 +79,14 @@ public class GUI extends JFrame {
 
                 //Verbindung aus Connectionpool holen
                 Globals.initConnectionPool();
-                connection = Globals.getPoolConnection();
+                //connection = Globals.getPoolConnection();
                 statusLabel.setText("verbunden");
                 System.out.println("Verbindung erfolgreich hergestellt");
 
                 //Gadgets laden
-                //navigator = new GadgetNavigator();
-                //navigator.loadGadgets(GUI.this);
-                //System.out.println("Liste mit Gadgets geladen!");
+                navigator = new GadgetNavigator();
+                navigator.loadGadgets();
+                System.out.println("Liste mit Gadgets geladen!");
             }
         });
 
@@ -116,7 +115,7 @@ public class GUI extends JFrame {
                 String email = userTextfield.getText();
                 String passwd = passwortTextField.getText();
                 //System.out.println(email + passwd);
-                boolean loginSuccess = DBQueries.verifyLogin(email, passwd, GUI.this);
+                boolean loginSuccess = DBQueries.verifyLogin(email, passwd);
 
                 //Login erfolgreich
                 if (loginSuccess){
@@ -124,9 +123,9 @@ public class GUI extends JFrame {
                     System.out.println("Login erfolgreich");
 
                     //Gadgets laden (Hier hin umgezogen)
-                    navigator = new GadgetNavigator();
-                    navigator.loadGadgets(GUI.this);
-                    System.out.println("Liste mit Gadgets geladen!");
+                    //navigator = new GadgetNavigator();
+                    //navigator.loadGadgets(GUI.this);
+                    //System.out.println("Liste mit Gadgets geladen!");
                 }
                 //Login nicht erfolgreich
                 else {
@@ -140,7 +139,7 @@ public class GUI extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 try {
-                    int count = DBQueries.countGadgets(GUI.this);
+                    int count = DBQueries.countGadgets();
                     countLabel.setText("Count: " + count);
                 } catch (Exception exception){
                     System.err.println("Fehler beim Berechnen der Anzahl: " + exception.getMessage());
@@ -165,7 +164,7 @@ public class GUI extends JFrame {
                 }
 
                 //In Datenbank anlegen
-                boolean success = DBQueries.registerUser(email, passwd, GUI.this);
+                boolean success = DBQueries.registerUser(email, passwd);
                 if (success) {
                     JOptionPane.showMessageDialog(null, "Benutzer erfolgreich registriert.", "Erfolg", JOptionPane.INFORMATION_MESSAGE);
                     statusLabel.setText("registered");
@@ -266,10 +265,10 @@ public class GUI extends JFrame {
                 Icon cover = imageLabel.getIcon();
 
                 //Daten verarbeiten
-                DBQueries.createUpdateGadget(GUI.this, url, emailVerkaeufer, keywords, description, cover);
+                DBQueries.createUpdateGadget(url, emailVerkaeufer, keywords, description, cover);
 
                 //Produkt neu laden (mit neuem/ aktualisiertem Gadget)
-                navigator.loadGadgets(GUI.this);
+                navigator.loadGadgets();
                 DTO currentGadget = navigator.getCurrentGadget();
 
                 //GUI aktualisieren
@@ -287,10 +286,10 @@ public class GUI extends JFrame {
 
                 if (angemeldeterUser.equals(verkaeufer)){
                     String url = gadgetUrlTextfield.getText();
-                    DBQueries.deleteItem(GUI.this, url);
+                    DBQueries.deleteItem(url);
 
                     //Produkte neu laden (mit einem Produkt weniger jetzt)
-                    navigator.loadGadgets(GUI.this);
+                    navigator.loadGadgets();
 
                     //Erstes Produkt anzeigen
                     DTO currentGadget = navigator.getFirst();
@@ -317,7 +316,7 @@ public class GUI extends JFrame {
                 String bewerter = userTextfield.getText();
 
                 //Kommentar in DB ergänzen
-                boolean inserted = DBQueries.addCommentRating(GUI.this, gadget, bewerter, comment, rating);
+                boolean inserted = DBQueries.addCommentRating(gadget, bewerter, comment, rating);
 
                 //Pop-up-Fenster mit Fehlermeldung
                 if (!inserted){
@@ -326,7 +325,7 @@ public class GUI extends JFrame {
                 }
 
                 //Produkt neu laden (mit neuen Kommentaren)
-                navigator.loadGadgets(GUI.this);
+                navigator.loadGadgets();
                 DTO currentGadget = navigator.getCurrentGadget();
 
                 //GUI aktualisieren
