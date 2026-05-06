@@ -29,11 +29,9 @@ public class DBQueries {
                     return count > 0; //true, wenn Benutzer gefunden wurde
                 }
             }
-
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
-
         return false; //Bei Fehler oder ungültigen Daten
     }
 
@@ -55,7 +53,6 @@ public class DBQueries {
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
-
         return 0; //Keine Ergebnisse
     }
 
@@ -198,6 +195,8 @@ public class DBQueries {
         }
     }
 
+
+
     //Kommentar und Bewertung zu Gadget hinzufügen - Umgeschrieben
     public static boolean addCommentRating (String url, String email_bewerter, String comment, int rating) {
 
@@ -240,13 +239,11 @@ public class DBQueries {
                 "gefallen = ?\n" +
                 "WHERE email = ? \n" +
                 "  AND url = ?";
-
         try (PreparedStatement pstUpdate = connection.prepareStatement(sqlUpdate)) {
             pstUpdate.setString(1, comment);
             pstUpdate.setInt(2, rating);
             pstUpdate.setString(3, email_bewerter);
             pstUpdate.setString(4, url);
-
             //Ausführen
             return pstUpdate.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -259,13 +256,11 @@ public class DBQueries {
     private static boolean insertCommentRating(Connection connection, String url, String email_bewerter, String comment, int rating) {
         String sqlInsert = "insert into bewertung (email, url, gefallen, kommentar)\n" +
                 "values (?, ?, ?, ?)";
-
         try (PreparedStatement pstInsert = connection.prepareStatement(sqlInsert)) {
             pstInsert.setString(1, email_bewerter);
             pstInsert.setString(2, url);
             pstInsert.setInt(3, rating);
             pstInsert.setString(4, comment);
-
             // Ausführen
             return pstInsert.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -321,13 +316,11 @@ public class DBQueries {
         String sqlUpdate = "UPDATE Gadgets\n" +
                 "SET Keywords = ?, Description = ?, Cover = ?\n" +
                 "WHERE URL = ?";
-
         try (PreparedStatement pstUpdate = connection.prepareStatement(sqlUpdate)) {
             pstUpdate.setString(1, keywords);
             pstUpdate.setString(2, description);
             pstUpdate.setBlob(3, Converter.icon2Blob(cover, connection));
             pstUpdate.setString(4, url);
-
             int rowsAffected = pstUpdate.executeUpdate();
             if (rowsAffected > 0) {
                 System.out.println("Erfolgreich aktualisiert");
@@ -341,16 +334,13 @@ public class DBQueries {
     private static void createGadget(Connection connection, String url, String email_verkaeufer, String keywords, String description, Icon cover) {
         String sqlInsert = "INSERT INTO Gadgets (url, email, keywords, description, cover)\n" +
                 "VALUES (?, ?, ?, ?, ?)";
-
         try (PreparedStatement pstInsert = connection.prepareStatement(sqlInsert)) {
-
             //Werte einfügen
             pstInsert.setString(1, url);
             pstInsert.setString(2, email_verkaeufer);
             pstInsert.setString(3, keywords);
             pstInsert.setString(4, description);
             pstInsert.setBlob(5, Converter.icon2Blob(cover, connection));
-
             int rowsAffected = pstInsert.executeUpdate();
             if (rowsAffected > 0) {
                 System.out.println("Erfolgreich hinzugefügt");
